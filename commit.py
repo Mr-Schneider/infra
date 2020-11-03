@@ -111,7 +111,7 @@ if __name__ == "__main__":
     data = post_url(
                 "/repos/%s/git/commits" % GITHUB_REPO,
                 {
-                    "message": "Automatic update to Markdown-%s" % md_ver,
+                    "message": "Automatic file change",
                     "parents": [HEAD['commit']['sha']],
                     "tree": HEAD['UPDATE']['tree']['sha']
                 }

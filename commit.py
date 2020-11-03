@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import base64
-import httplib
+import http.client
 
 HEADERS = {
     'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
@@ -14,17 +14,14 @@ def get_url(url, post_data = None):
     if url.find("://") == -1:
         url = "https://api.github.com%s" % url
 
-    if not os.environ.has_key("GITHUB_TOKEN"):
-        raise Exception("Set the GITHUB_TOKEN variable")
-
     (proto, host_path) = url.split('//')
     (host_port, path) = host_path.split('/', 1)
     path = '/' + path
 
     if url.startswith('https'):
-        conn = httplib.HTTPSConnection(host_port)
+        conn = http.client.HTTPSConnection(host_port)
     else:
-        conn = httplib.HTTPConnection(host_port)
+        conn = http.client.HTTPConnection(host_port)
 
     method = 'GET'
     if post_data:
@@ -63,7 +60,7 @@ if __name__ == "__main__":
     # step 2: Grab the commit that HEAD points to
     data = get_url(HEAD['url'])
     # remove what we don't need for clarity
-    for key in data.keys():
+    for key in list(data.keys()):
         if key not in ['sha', 'tree']:
             del data[key]
     HEAD['commit'] = data
@@ -129,7 +126,7 @@ if __name__ == "__main__":
                 }
             )
 
-    if data.has_key('object'): # PASS
+    if 'object' in data: # PASS
         sys.exit(0)
     else: # FAIL
         print(data['message'])

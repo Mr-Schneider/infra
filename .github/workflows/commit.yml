@@ -1,0 +1,11 @@
+name: commit
+
+on: [push]
+
+jobs:
+  commit:
+    name: commit
+    runs-on: ubuntu-latest
+    steps:
+    - run: |
+        env

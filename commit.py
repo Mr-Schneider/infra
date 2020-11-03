@@ -132,5 +132,5 @@ if __name__ == "__main__":
     if data.has_key('object'): # PASS
         sys.exit(0)
     else: # FAIL
-        print data['message']
+        print(data['message'])
         sys.exit(1)

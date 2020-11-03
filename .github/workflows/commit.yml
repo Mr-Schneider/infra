@@ -8,4 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - run: |
-        env
+        echo "test file" > temp_file
+        git checkout -b test-file
+        git add .
+        git commit -m 'adding test file'
+        git push --set-upstream origin test-file

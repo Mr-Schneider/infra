@@ -1,0 +1,136 @@
+import os
+import sys
+import json
+import base64
+import httplib
+
+HEADERS = {
+    'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
+    'Authorization': 'token %s' % os.environ['GITHUB_TOKEN'],
+}
+
+
+def get_url(url, post_data = None):
+    if url.find("://") == -1:
+        url = "https://api.github.com%s" % url
+
+    if not os.environ.has_key("GITHUB_TOKEN"):
+        raise Exception("Set the GITHUB_TOKEN variable")
+
+    (proto, host_path) = url.split('//')
+    (host_port, path) = host_path.split('/', 1)
+    path = '/' + path
+
+    if url.startswith('https'):
+        conn = httplib.HTTPSConnection(host_port)
+    else:
+        conn = httplib.HTTPConnection(host_port)
+
+    method = 'GET'
+    if post_data:
+        method = 'POST'
+        post_data = json.dumps(post_data)
+
+    conn.request(method, path, body=post_data, headers=HEADERS)
+    response = conn.getresponse()
+
+    if (response.status == 404):
+        raise Exception("404 - %s not found" % url)
+
+    result = response.read().decode('UTF-8', 'replace')
+    try:
+        return json.loads(result)
+    except ValueError:
+        return result
+
+
+def post_url(url, data):
+    return get_url(url, data)
+
+
+if __name__ == "__main__":
+    GITHUB_REPO = os.getenv('GITHUB_REPOSITORY')
+    GITHUB_BRANCH = "master"
+    GITHUB_FILE = "test.yml"
+
+    # step 1: Get a reference to HEAD
+    data = get_url("/repos/%s/git/refs/heads/%s" % (GITHUB_REPO, GITHUB_BRANCH))
+    HEAD = {
+        'sha' : data['object']['sha'],
+        'url' : data['object']['url'],
+    }
+
+    # step 2: Grab the commit that HEAD points to
+    data = get_url(HEAD['url'])
+    # remove what we don't need for clarity
+    for key in data.keys():
+        if key not in ['sha', 'tree']:
+            del data[key]
+    HEAD['commit'] = data
+
+    # step 4: Get a hold of the tree that the commit points to
+    data = get_url(HEAD['commit']['tree']['url'])
+    HEAD['tree'] = { 'sha' : data['sha'] }
+
+    # intermediate step: get the latest content from GitHub and make an updated version
+    for obj in data['tree']:
+        if obj['path'] == GITHUB_FILE:
+            data = get_url(obj['url']) # get the blob from the tree
+            data = base64.b64decode(data['content'])
+            break
+
+    new_file = 'The file should have this'
+
+    ####
+    #### WARNING WRITE OPERATIONS BELOW
+    ####
+
+    # step 3: Post your new file to the server
+    data = post_url(
+                "/repos/%s/git/blobs" % GITHUB_REPO,
+                {
+                    'content' : new_file,
+                    'encoding' : 'utf-8'
+                }
+            )
+    HEAD['UPDATE'] = { 'sha' : data['sha'] }
+
+    # step 5: Create a tree containing your new file
+    data = post_url(
+                "/repos/%s/git/trees" % GITHUB_REPO,
+                {
+                    "base_tree": HEAD['tree']['sha'],
+                    "tree": [{
+                        "path": GITHUB_FILE,
+                        "mode": "100644",
+                        "type": "blob",
+                        "sha": HEAD['UPDATE']['sha']
+                    }]
+                }
+            )
+    HEAD['UPDATE']['tree'] = { 'sha' : data['sha'] }
+
+    # step 6: Create a new commit
+    data = post_url(
+                "/repos/%s/git/commits" % GITHUB_REPO,
+                {
+                    "message": "Automatic update to Markdown-%s" % md_ver,
+                    "parents": [HEAD['commit']['sha']],
+                    "tree": HEAD['UPDATE']['tree']['sha']
+                }
+            )
+    HEAD['UPDATE']['commit'] = { 'sha' : data['sha'] }
+
+    # step 7: Update HEAD, but don't force it!
+    data = post_url(
+                "/repos/%s/git/refs/heads/%s" % (GITHUB_REPO, GITHUB_BRANCH),
+                {
+                    "sha": HEAD['UPDATE']['commit']['sha']
+                }
+            )
+
+    if data.has_key('object'): # PASS
+        sys.exit(0)
+    else: # FAIL
+        print data['message']
+        sys.exit(1)

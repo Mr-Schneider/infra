@@ -8,9 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - run: |
-        echo "test file" > temp_file
-        git checkout -b test-file
-        git add .
-        git commit -m 'adding test file'
-        git push --set-upstream origin test-file
+    - name: Setup python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - run: python commit.py
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

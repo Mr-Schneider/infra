@@ -5,11 +5,11 @@ import base64
 import requests
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     GITHUB_REPO = os.getenv('GITHUB_REPOSITORY')
-    GITHUB_BRANCH = "master"
-    GITHUB_FILE = "test.yml"
+    GITHUB_BRANCH = 'master'
+    GITHUB_FILE = 'test.yml'
     HEADERS = {
         'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
         'Authorization': 'token %s' % os.environ['GITHUB_TOKEN']
@@ -48,11 +48,11 @@ if __name__ == "__main__":
             break
 
     # Content of the file to replace
-    new_file = 'This action has been ran {os.getenv("GITHUB_RUN_NUMBER")} times'
+    new_file = f'This action has been ran {os.getenv("GITHUB_RUN_NUMBER")} times'
 
     # Send new file to github
     file_change_response = requests.post(
-        f"https://api.github.com/repos/{GITHUB_REPO}/git/blobs",
+        f'https://api.github.com/repos/{GITHUB_REPO}/git/blobs',
         data=json.dumps({
             'content' : new_file,
             'encoding' : 'utf-8'
@@ -69,14 +69,14 @@ if __name__ == "__main__":
 
     # Create new tree with file
     tree_create_response = requests.post(
-        f"https://api.github.com/repos/{GITHUB_REPO}/git/trees",
+        f'https://api.github.com/repos/{GITHUB_REPO}/git/trees',
         data=json.dumps({
-            "base_tree": HEAD['tree']['sha'],
-            "tree": [{
-                "path": GITHUB_FILE,
-                "mode": "100644",
-                "type": "blob",
-                "sha": HEAD['UPDATE']['sha']
+            'base_tree': HEAD['tree']['sha'],
+            'tree': [{
+                'path': GITHUB_FILE,
+                'mode': '100644',
+                'type': 'blob',
+                'sha': HEAD['UPDATE']['sha']
             }]
         }),
         headers=HEADERS
@@ -91,11 +91,11 @@ if __name__ == "__main__":
 
     # Create new commit
     commit_create_response = requests.post(
-        f"https://api.github.com/repos/{GITHUB_REPO}/git/commits",
+        f'https://api.github.com/repos/{GITHUB_REPO}/git/commits',
         data=json.dumps({
-            "message": "Automatic file change",
-            "parents": [HEAD['commit']['sha']],
-            "tree": HEAD['UPDATE']['tree']['sha']
+            'message': 'Automatic file change',
+            'parents': [HEAD['commit']['sha']],
+            'tree': HEAD['UPDATE']['tree']['sha']
         }),
         headers=HEADERS
     )
@@ -109,9 +109,9 @@ if __name__ == "__main__":
 
     # Update head
     head_update_response = requests.post(
-        f"https://api.github.com/repos/{GITHUB_REPO}/git/refs/heads/{GITHUB_BRANCH}",
+        f'https://api.github.com/repos/{GITHUB_REPO}/git/refs/heads/{GITHUB_BRANCH}',
         data=json.dumps({
-            "sha": HEAD['UPDATE']['commit']['sha']
+            'sha': HEAD['UPDATE']['commit']['sha']
         }),
         headers=HEADERS
     )

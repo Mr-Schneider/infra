@@ -61,6 +61,10 @@ if __name__ == "__main__":
     )
     file_change_data = json.loads(file_change_response.text)
 
+    if 'sha' not in file_change_data:
+        print(file_change_data)
+        sys.exit(1)
+
     HEAD['UPDATE'] = { 'sha' : file_change_data['sha'] }
 
     # Create new tree with file

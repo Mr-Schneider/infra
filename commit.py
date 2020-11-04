@@ -2,132 +2,111 @@ import os
 import sys
 import json
 import base64
-import http.client
-
-HEADERS = {
-    'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
-    'Authorization': 'token %s' % os.environ['GITHUB_TOKEN'],
-}
-
-
-def get_url(url, post_data = None):
-    if url.find("://") == -1:
-        url = "https://api.github.com%s" % url
-
-    (proto, host_path) = url.split('//')
-    (host_port, path) = host_path.split('/', 1)
-    path = '/' + path
-
-    if url.startswith('https'):
-        conn = http.client.HTTPSConnection(host_port)
-    else:
-        conn = http.client.HTTPConnection(host_port)
-
-    method = 'GET'
-    if post_data:
-        method = 'POST'
-        post_data = json.dumps(post_data)
-
-    conn.request(method, path, body=post_data, headers=HEADERS)
-    response = conn.getresponse()
-
-    if (response.status == 404):
-        raise Exception("404 - %s not found" % url)
-
-    result = response.read().decode('UTF-8', 'replace')
-    try:
-        return json.loads(result)
-    except ValueError:
-        return result
-
-
-def post_url(url, data):
-    return get_url(url, data)
+import requests
 
 
 if __name__ == "__main__":
+
     GITHUB_REPO = os.getenv('GITHUB_REPOSITORY')
     GITHUB_BRANCH = "master"
     GITHUB_FILE = "test.yml"
-
-    # step 1: Get a reference to HEAD
-    data = get_url("/repos/%s/git/refs/heads/%s" % (GITHUB_REPO, GITHUB_BRANCH))
-    HEAD = {
-        'sha' : data['object']['sha'],
-        'url' : data['object']['url'],
+    HEADERS = {
+        'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
+        'Authorization': 'token %s' % os.environ['GITHUB_REPOSITORY']
     }
 
-    # step 2: Grab the commit that HEAD points to
-    data = get_url(HEAD['url'])
-    # remove what we don't need for clarity
-    for key in list(data.keys()):
+    # Get current master data
+    head_response = requests.get(f'https://api.github.com/repos/{GITHUB_REPO}/git/refs/heads/{GITHUB_BRANCH}')
+    head_data = json.loads(head_response.text)
+
+    HEAD = {
+        'sha' : head_data['object']['sha'],
+        'url' : head_data['object']['url'],
+    }
+
+    # Get current head commit
+    commit_response = requests.get(HEAD['url'])
+    commit_data = json.loads(commit_response.text)
+
+    # Remove unessesary files
+    for key in list(commit_data.keys()):
         if key not in ['sha', 'tree']:
-            del data[key]
-    HEAD['commit'] = data
+            del commit_data[key]
+    HEAD['commit'] = commit_data
 
-    # step 4: Get a hold of the tree that the commit points to
-    data = get_url(HEAD['commit']['tree']['url'])
-    HEAD['tree'] = { 'sha' : data['sha'] }
+    # Get the tree of the commit
+    tree_response = requests.get(HEAD['commit']['tree']['url'])
+    tree_data = json.loads(tree_response.text)
+    HEAD['tree'] = { 'sha' : tree_data['sha'] }
 
-    # intermediate step: get the latest content from GitHub and make an updated version
-    for obj in data['tree']:
+    # Get the latest commit, and target file data
+    for obj in tree_data['tree']:
         if obj['path'] == GITHUB_FILE:
-            data = get_url(obj['url']) # get the blob from the tree
-            data = base64.b64decode(data['content'])
+            file_response = requests.get(obj['url'])
+            file_data = json.loads(file_response.text)
+            data = base64.b64decode(file_data['content'])
             break
 
-    new_file = 'The file should have this'
+    # Content of the file to replace
+    new_file = 'This action has been ran {os.getenv("GITHUB_RUN_NUMBER")} times'
 
-    ####
-    #### WARNING WRITE OPERATIONS BELOW
-    ####
+    # Send new file to github
+    file_change_response = requests.post(
+        f"https://api.github.com/repos/{GITHUB_REPO}/git/blobs",
+        data=json.dumps({
+            'content' : new_file,
+            'encoding' : 'utf-8'
+        }),
+        headers=HEADERS
+    )
+    file_change_data = json.loads(file_change_response.text)
 
-    # step 3: Post your new file to the server
-    data = post_url(
-                "/repos/%s/git/blobs" % GITHUB_REPO,
-                {
-                    'content' : new_file,
-                    'encoding' : 'utf-8'
-                }
-            )
-    HEAD['UPDATE'] = { 'sha' : data['sha'] }
+    HEAD['UPDATE'] = { 'sha' : file_change_data['sha'] }
 
-    # step 5: Create a tree containing your new file
-    data = post_url(
-                "/repos/%s/git/trees" % GITHUB_REPO,
-                {
-                    "base_tree": HEAD['tree']['sha'],
-                    "tree": [{
-                        "path": GITHUB_FILE,
-                        "mode": "100644",
-                        "type": "blob",
-                        "sha": HEAD['UPDATE']['sha']
-                    }]
-                }
-            )
-    HEAD['UPDATE']['tree'] = { 'sha' : data['sha'] }
+    # Create new tree with file
+    tree_create_response = requests.post(
+        f"https://api.github.com/repos/{GITHUB_REPO}/git/trees",
+        data=json.dumps({
+            "base_tree": HEAD['tree']['sha'],
+            "tree": [{
+                "path": GITHUB_FILE,
+                "mode": "100644",
+                "type": "blob",
+                "sha": HEAD['UPDATE']['sha']
+            }]
+        }),
+        headers=HEADERS
+    )
+    tree_create_data = json.loads(tree_create_response.text)
 
-    # step 6: Create a new commit
-    data = post_url(
-                "/repos/%s/git/commits" % GITHUB_REPO,
-                {
-                    "message": "Automatic file change",
-                    "parents": [HEAD['commit']['sha']],
-                    "tree": HEAD['UPDATE']['tree']['sha']
-                }
-            )
-    HEAD['UPDATE']['commit'] = { 'sha' : data['sha'] }
+    HEAD['UPDATE']['tree'] = { 'sha' : tree_create_data['sha'] }
 
-    # step 7: Update HEAD, but don't force it!
-    data = post_url(
-                "/repos/%s/git/refs/heads/%s" % (GITHUB_REPO, GITHUB_BRANCH),
-                {
-                    "sha": HEAD['UPDATE']['commit']['sha']
-                }
-            )
+    # Create new commit
+    commit_create_response = requests.post(
+        f"https://api.github.com/repos/{GITHUB_REPO}/git/commits",
+        data=json.dumps({
+            "message": "Automatic file change",
+            "parents": [HEAD['commit']['sha']],
+            "tree": HEAD['UPDATE']['tree']['sha']
+        }),
+        headers=HEADERS
+    )
+    commit_create_data = json.loads(commit_create_response.text)
 
-    if 'object' in data: # PASS
+    HEAD['UPDATE']['commit'] = { 'sha' : commit_create_data['sha'] }
+
+    # Update head
+    head_update_response = requests.post(
+        f"https://api.github.com/repos/{GITHUB_REPO}/git/refs/heads/{GITHUB_BRANCH}",
+        data=json.dumps({
+            "sha": HEAD['UPDATE']['commit']['sha']
+        }),
+        headers=HEADERS
+    )
+    head_update_data = json.loads(head_update_response.text)
+
+    if 'object' in head_update_data: # PASS
         sys.exit(0)
     else: # FAIL
-        print(data['message'])
+        print(head_update_data['message'])
         sys.exit(1)

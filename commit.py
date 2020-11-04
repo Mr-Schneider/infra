@@ -12,7 +12,7 @@ if __name__ == "__main__":
     GITHUB_FILE = "test.yml"
     HEADERS = {
         'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0.5) Gecko/20120601 Firefox/10.0.5',
-        'Authorization': 'token %s' % os.environ['GITHUB_REPOSITORY']
+        'Authorization': 'token %s' % os.environ['GITHUB_TOKEN']
     }
 
     # Get current master data
@@ -83,6 +83,10 @@ if __name__ == "__main__":
     )
     tree_create_data = json.loads(tree_create_response.text)
 
+    if 'sha' not in tree_create_data:
+        print(tree_create_data)
+        sys.exit(1)
+
     HEAD['UPDATE']['tree'] = { 'sha' : tree_create_data['sha'] }
 
     # Create new commit
@@ -97,6 +101,10 @@ if __name__ == "__main__":
     )
     commit_create_data = json.loads(commit_create_response.text)
 
+    if 'sha' not in commit_create_data:
+        print(commit_create_data)
+        sys.exit(1)
+
     HEAD['UPDATE']['commit'] = { 'sha' : commit_create_data['sha'] }
 
     # Update head
@@ -109,8 +117,8 @@ if __name__ == "__main__":
     )
     head_update_data = json.loads(head_update_response.text)
 
-    if 'object' in head_update_data: # PASS
+    if 'object' in head_update_data:
         sys.exit(0)
-    else: # FAIL
+    else:
         print(head_update_data['message'])
         sys.exit(1)

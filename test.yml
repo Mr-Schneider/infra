@@ -1,1 +1,1 @@
-This action has been ran {os.getenv("GITHUB_RUN_NUMBER")} times
+This action has been ran 13 times

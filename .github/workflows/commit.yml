@@ -12,6 +12,7 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.8
+    - run: pip install requests
     - run: python commit.py
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
